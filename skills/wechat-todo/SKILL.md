@@ -32,21 +32,29 @@ description: 微信消息→待办的一站式处理：全量扫描微信会话�
 
 - **触发**：说"更新待办 / 生成今天的待办 / 同步滴答 / 整理微信消息 / 跑一下待办"即可；
 - **干四件事**：扫微信增量消息 → 写待办文件 → 去重提交滴答清单 → 归档新文件 → 汇报；
-- **依赖 1（微信读取）**：需要本机装有 wechat-local 工具链（`~/.wechat-cli/wxcli.cmd` 与 `search_all.py`）。若 `wxcli` 不存在，先安装 wechat-cli 并完成解密，否则跳过微信扫描这一步前要告知用户；
-- **依赖 2（滴答清单 MCP）**：见下步，未接入时**其他步骤照常做，滴答同步步骤跳过并在汇报中明确说明**。
+- **依赖 1（微信读取）**：wechat-cli（`~/.wechat-cli/wxcli.cmd`）与检索脚本 `search_all.py` **已由安装器随包装好**（后者位于 `skills/wechat-local/scripts/`）。首次运行先验一步：`wxcli sessions` 能返回会话列表即可用；若报密钥错误或出乱码，保持微信运行后跑 `~/.wechat-cli/wxcli.cmd init` 重建密钥（config.json 的 db_dir 会自动探测），结果告知用户；
+- **依赖 2（滴答清单 MCP）**：安装时若带了 `--token` 已自动写入配置；未接入时**其他步骤照常做，滴答同步步骤跳过并在汇报中明确说明**。
 
 ### ③ 接入滴答清单 MCP（TickTick / 滴答清单）
 
-1. 打开 ZCode 的 MCP 配置入口（设置 → MCP 服务器；或编辑用户级 MCP 配置文件，见 zcode-configuration-guide）；
-2. 添加一个**滴答清单（TickTick/dida365）MCP server**——可选用社区开源的 ticktick-mcp 类实现，按该实现的文档填好所需参数（一般是 API token / 账号授权）；
-3. 保存并等待连接成功，确认工具列表里**出现了滴答相关工具**；
-4. **验证标准**：本 skill 需要以下 5 类能力全部可用——
+**方式 A（推荐）· 安装器自动写入：**
+1. 到滴答清单开发者平台生成**个人访问令牌**（personal access token；可搜索"滴答清单 MCP 官方文档"进入 developer.dida365.com 获取）；
+2. 重跑一行安装命令带上令牌：`npx github:syskuku/wechat-todo --token <你的令牌>` —— 自动写入本机 AI 工具的 MCP 配置（ZCode → `~/.zcode/cli/config.json` 的 `mcp.servers`；Claude Code → `~/.claude.json` 的 `mcpServers`）。
+
+**方式 B · 手动粘贴**（没有自动写入时用）：把 `<你的令牌>` 换成自己的，加入你所用工具的 MCP 配置（Claude Code 放在顶层 `mcpServers` 下）：
+
+```json
+{"mcp":{"servers":{"滴答清单":{"type":"http","url":"https://mcp.dida365.com","headers":{"Authorization":"Bearer <你的令牌>"}}}}}
+```
+
+**验证标准**：配置保存/连接后，确认工具列表出现滴答相关工具，且以下 5 类能力全部可用——
    - 列出项目（list projects）
    - 筛选/查询未完成任务（filter/undone tasks）
    - 查询已完成任务（completed tasks）
    - 按关键词搜索任务（search tasks）
    - 新建任务（batch add）与标记完成（complete task）
-5. 验证通过后回到对话，告诉 agent"滴答 MCP 已配好"。
+
+验证通过后回到对话，告诉 agent"滴答 MCP 已配好"。
 
 ### ④ 作者信息
 

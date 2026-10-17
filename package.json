@@ -1,16 +1,20 @@
 {
   "name": "wechat-todo",
-  "version": "1.0.0",
-  "description": "ZCode skill installer: 微信消息→待办整理→滴答清单(TickTick)同步。npx github:syskuku/wechat-todo 一行安装到 ~/.agents/skills/",
+  "version": "2.0.0",
+  "description": "微信消息→待办整理→滴答清单(TickTick)同步 一键安装：npx github:syskuku/wechat-todo（含 wechat-cli 工具链与两个 skill，即插即用）",
   "bin": {
     "wechat-todo": "bin/wechat-todo.js"
   },
   "files": [
     "bin/",
-    "wechat-todo/",
+    "skills/",
+    "vendor/",
     "README.md"
   ],
-  "keywords": ["zcode", "skill", "wechat", "ticktick", "todo"],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["skill", "wechat", "ticktick", "dida365", "todo", "ai-agent", "claude-code", "zcode"],
   "author": "Syskuku_暮雪逢樱 (https://www.imikufans.com)",
   "license": "MIT",
   "repository": {
