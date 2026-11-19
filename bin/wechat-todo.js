@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 "use strict";
 /**
- * wechat-todo 一键安装器
+ * wechat-todo 一键安装器 v2.1
  *   npx github:syskuku/wechat-todo
  *   npx github:syskuku/wechat-todo --token <滴答个人访问令牌>   # 同时自动配置滴答清单 MCP
- * 干四件事：装 skills（wechat-todo + wechat-local）→ 铺设 wechat-cli 工具链 →
- *          自动提取解密密钥（wxcli init）→ 写入滴答清单 MCP 配置
+ * 干五件事：装 skills（wechat-todo + wechat-local）→ 按本机架构铺设 wechat-cli 工具链
+ *          （deps-arm64 / deps-x64 二选一）→ 自动提取解密密钥（wxcli init）
+ *          → 写入滴答清单 MCP 配置
  * 兼容：ZCode / OpenClaw（~/.agents|~/.zcode/skills）、Claude Code（~/.claude/skills）
  * 环境变量：DIDA365_TOKEN 等价 --token；WECHAT_TODO_SKILLS_DIR 指定 skills 目录
  */
@@ -50,30 +51,75 @@ if (process.env.WECHAT_TODO_SKILLS_DIR) {
   if (targets.length === 0) targets = [candidates[0]];
 }
 for (const [root, label] of targets) {
+  const installed = [];
   for (const name of skillNames) {
-    const dest = path.join(root, name);
+    let dest = path.join(root, name);
+    try {
+      const st = fs.lstatSync(dest);
+      if (st.isSymbolicLink()) {
+        // 尊重软链布局（如 cc-switch 管理的 skills）：跟随链接装到真实位置
+        try { dest = fs.realpathSync(dest); }
+        catch (e) { warn("跳过 " + dest + "（断开的符号链接）"); continue; }
+      }
+    } catch (e) { /* 不存在 → 正常新建 */ }
     fs.mkdirSync(dest, { recursive: true });
     fs.cpSync(path.join(skillsSrc, name), dest, { recursive: true, force: true });
+    installed.push(name);
   }
-  ok("skills 装入 " + root + "  ← " + label + "（" + skillNames.join("、") + "）");
+  ok("skills 装入 " + root + "  ← " + label + "（" + installed.join("、") + "）");
 }
 
-/* ---------- B. 铺设 wechat-cli 工具链 ---------- */
-// 包内 vendor 只含 tool/ deps/ wxcli.cmd（Apache-2.0），绝不含也不会覆盖
-// 用户本机的 all_keys.json（解密密钥）与 config.json（db_dir 配置）
+/* ---------- A2. 检测本机架构与 Python 版本 ---------- */
+function detectArch() {
+  try {
+    const r = cp.spawnSync("python", ["-c", "import platform;print(platform.machine().upper())"], {
+      encoding: "utf8", timeout: 15000,
+    });
+    const m = (r.stdout || "").trim().toUpperCase();
+    if (m.includes("ARM64") || m.includes("AARCH64")) return "arm64";
+    if (m.includes("AMD64") || m.includes("X86_64")) return "x64";
+  } catch (e) { /* fall through */ }
+  return process.arch === "arm64" ? "arm64" : "x64";
+}
+let pyVer = "";
+try {
+  const r = cp.spawnSync("python", ["-c", "import platform;print(platform.python_version())"], {
+    encoding: "utf8", timeout: 15000,
+  });
+  pyVer = (r.stdout || "").trim();
+} catch (e) { /* ignore */ }
+const arch = detectArch();
+info("本机检测：Python " + (pyVer || "未检测到") + " / " + (arch === "arm64" ? "ARM64" : "x64") + " 架构");
+
+/* ---------- B. 铺设 wechat-cli 工具链（按架构选依赖集） ---------- */
+// 包内 vendor 只含 tool/ deps-arm64/ deps-x64/ wxcli.cmd（Apache-2.0），
+// 绝不含也不会覆盖用户本机的 all_keys.json（解密密钥）与 config.json（db_dir）
 const wcSrc = path.join(pkgRoot, "vendor", "wechat-cli");
 const wcDest = path.join(home, ".wechat-cli");
+const depsSrcName = arch === "arm64" ? "deps-arm64" : "deps-x64";
 let wcNote = "-";
 if (fs.existsSync(wcSrc)) {
   fs.mkdirSync(wcDest, { recursive: true });
-  for (const dir of ["tool", "deps"]) {
-    fs.cpSync(path.join(wcSrc, dir), path.join(wcDest, dir), { recursive: true, force: true });
+  // tool（架构无关）
+  fs.cpSync(path.join(wcSrc, "tool"), path.join(wcDest, "tool"), { recursive: true, force: true });
+  // deps：按架构二选一，铺到统一的 ~/.wechat-cli/deps（wxcli.cmd 的 PYTHONPATH 不变）
+  const depsSrc = path.join(wcSrc, depsSrcName);
+  if (fs.existsSync(depsSrc)) {
+    fs.cpSync(depsSrc, path.join(wcDest, "deps"), { recursive: true, force: true });
+  } else {
+    warn("包内缺少 " + depsSrcName + "，Python 依赖未安装");
   }
   fs.copyFileSync(path.join(wcSrc, "wxcli.cmd"), path.join(wcDest, "wxcli.cmd"));
-  wcNote = "wechat-cli-plus 0.2.4 (Apache-2.0) → ~/.wechat-cli（已存在则平滑更新）";
+  wcNote = "wechat-cli-plus 0.2.4 (Apache-2.0) → ~/.wechat-cli（依赖集=" + depsSrcName + "）";
   ok("微信工具链 " + wcNote);
 } else {
   warn("包内缺少 vendor/wechat-cli，微信读取能力未安装");
+}
+// Python 版本提示：预编译依赖按 3.12 打包（pycryptodome/psutil 为 abi3 通用，
+// zstandard 为 cp312 绑定）；其他版本给出手动补装命令
+if (pyVer && !pyVer.startsWith("3.12")) {
+  warn("预编译依赖按 Python 3.12 打包，当前 " + pyVer + " 可能不匹配 zstandard。");
+  info("可执行：python -m pip install --target \"" + path.join(wcDest, "deps") + "\" zstandard pycryptodome psutil click");
 }
 
 /* ---------- C. 解密密钥初始化 ---------- */

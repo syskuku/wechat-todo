@@ -20,7 +20,7 @@ npx github:syskuku/wechat-todo
 |---|---|---|
 | `wechat-todo` skill | 待办主工作流（扫描→判定→写文件→同步滴答→归档→报告） | `~/.agents/skills/wechat-todo/` 等 |
 | `wechat-local` skill | 微信消息查询/导出/检索的全部脚本（`search_all.py` 等） | `~/.agents/skills/wechat-local/` |
-| wechat-cli 工具链 | 开源 [wechat-cli-plus](https://github.com/maomao3334/wechat-cli-plus) 0.2.4（Apache-2.0），含全部 Python 依赖，**无需 pip 安装** | `~/.wechat-cli/` |
+| wechat-cli 工具链 | 开源 [wechat-cli-plus](https://github.com/maomao3334/wechat-cli-plus) 0.2.4（Apache-2.0），含 **ARM64 与 x64 双架构** Python 依赖，安装时按本机自动二选一，**无需 pip 安装** | `~/.wechat-cli/` |
 | 解密密钥初始化 | 自动检测并执行 `wxcli init`（保持微信运行即可，密钥从本机微信进程提取，数据不出本机） | `~/.wechat-cli/all_keys.json` |
 | 滴答清单 MCP | 提供 `--token` 时**自动写入**你本机工具的 MCP 配置 | ZCode → `~/.zcode/cli/config.json`；Claude Code → `~/.claude.json` |
 
@@ -119,7 +119,14 @@ git clone https://github.com/syskuku/wechat-todo.git
 | 报 `zstandard has no attribute ZstdDecompressor` | 把 `~/.wechat-cli/deps/zstandard/*` 复制到 `%LOCALAPPDATA%\Temp\wechat-cli-plus-pydeps\zstandard\` |
 | 滴答工具没出现 | 令牌是否有效；配置写在了哪个工具的配置文件里（看安装输出）；重启 AI 工具加载 MCP |
 | npx 拉不下来（网络） | 换网络重试，或 `git clone` 后手动 `node bin/wechat-todo.js` |
+| x64（Intel/AMD）电脑能用吗 | 能。安装器检测本机架构（`platform.machine()`），自动铺设 `deps-x64` 依赖集；ARM64 电脑铺设 `deps-arm64` |
 | 微信换了版本/重装 | 重新 `wxcli init`，db_dir 会自动重探测 |
+
+## 架构与 Python 版本
+
+- **双架构随包**：`vendor/wechat-cli/deps-arm64`（Windows on ARM）与 `deps-x64`（Intel/AMD）各含一套完整依赖（pycryptodome / zstandard / psutil / click），因为这几个包的二进制扩展不带架构后缀、不能混放同一目录——安装器按本机检测结果只铺对应的一套到 `~/.wechat-cli/deps/`。
+- **推荐 Python 3.12**：预编译的 zstandard 为 `cp312` 绑定（pycryptodome/psutil 为 abi3 跨 3.7+、click 纯 Python）。若你的 Python 不是 3.12，安装器会打印一条手动补装命令（`python -m pip install --target ~/.wechat-cli/deps zstandard ...`）按你的版本现场编译/取包即可。
+- 密钥提取 `wxcli init` 对 Python 3.10+ 均可用。
 
 ## 作者
 
